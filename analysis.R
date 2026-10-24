@@ -41,7 +41,11 @@ N <- nrow(responses)
 # Q9 : Smart home technology or security (such as Nest, Ring, or SimpliSafe)
 # Q10: Smart TV or Streaming Device (such as Roku or Amazon Firestick)
 
+colMeans(responses, na.rm=T)
 
+data |> 
+  group_by(impairment) |> 
+  reframe(mean(SLB038_5, na.rm=T))
 
 ################################################################################
 # NON-DIF (baseline)
@@ -284,48 +288,12 @@ par_est <- mirt::mod2values(fit1) |>
   filter(item %in% c("SLB038_3", "SLB038_5", "GROUP") & name %in% c("d", "MEAN_1", "COV_11")) |> 
   select(group, item, name, value)
 
-
-# Reference mean and variance from the dual group
-mu_ref <- par_est |>
-  filter(item == "GROUP", group == "dual", name == "MEAN_1") |>
-  pull(value)
-
-var_ref <- par_est |>
-  filter(item == "GROUP", group == "dual", name == "COV_11") |>
-  pull(value)
-
-# Transform group distributions
-par_est <- par_est |>
-  mutate(
-    value = case_when(
-      item == "GROUP" & name == "MEAN_1" ~
-        (value - mu_ref) / sqrt(var_ref),
-      
-      item == "GROUP" & name == "COV_11" ~
-        value / var_ref,
-      
-      TRUE ~ value
-    )
-  )
-
 # to IRT parameter
 par_est[par_est$name == "d", "value"] <- -par_est[par_est$name == "d", "value"]
 
-par_est |> 
-  filter(item == "GROUP")
-
-par_est |> 
-  filter(item != "GROUP") |> 
-  arrange(item)
-
--coef(fit1,simplify=TRUE)$reference$items
--coef(fit1,simplify=TRUE)$reference$items[,2] |> scale() |> pnorm(lower.tail = TRUE) |> round(2)
 ################################################################################
 # Visualization
 ################################################################################
-
-library(tidyverse)
-
 # 1. Extract group parameters (Means & SDs)
 group_params <- par_est %>%
   filter(item == "GROUP") %>%
@@ -353,6 +321,11 @@ item_ticks_base$item <- dplyr::recode(
 item_ticks_base$y <- 0.01
 item_ticks_base$y[item_ticks_base$item == "Q3 \n(laptop)"] <- -0.01
 
+item_ticks_others <- data.frame(
+  item = 1:10, 
+  value = -coef(fit1, simplify=TRUE)[[1]]$items[,2]
+  )[-c(3,5),]
+
 ggplot() +
   # Curves
   geom_line(data = density_data, aes(x = x, y = density, color = group), linewidth = 1) +
@@ -363,6 +336,11 @@ ggplot() +
     aes(x = value, y = y, color = group, shape = item),
     size = 5, position = position_jitter(height = 0.005, width = 0,seed = 5) # slight jitter to prevent overlap
   ) +
+  geom_text(
+    data = item_ticks_others,
+    aes(x = value, y = 0.6, label = item),
+    size = 3.5 # slight jitter to prevent overlap
+  ) +
   scale_color_brewer(palette = "Set1") +
   scale_fill_brewer(palette = "Set1") +
   labs(
@@ -371,10 +349,44 @@ ggplot() +
     y = "Density",
     color = "Group",
     fill = "Group",
-    shape = "Item"
+    shape = "Device\nAccess\nThreshold"
   ) +
   coord_cartesian(xlim = c(-3, 3.5), ylim = c(0, 0.6)) +
   scale_x_continuous(breaks = NULL) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "bottom")
 
+################################################################################
+# Reference mean and variance from the dual group
+mu_ref <- par_est |>
+  filter(item == "GROUP", group == "dual", name == "MEAN_1") |>
+  pull(value)
+
+var_ref <- par_est |>
+  filter(item == "GROUP", group == "dual", name == "COV_11") |>
+  pull(value)
+
+# Transform group distributions
+par_est <- par_est |>
+  mutate(
+    value = case_when(
+      item == "GROUP" & name == "MEAN_1" ~
+        (value - mu_ref) / sqrt(var_ref),
+      
+      item == "GROUP" & name == "COV_11" ~
+        value / var_ref,
+      
+      TRUE ~ value
+    )
+  )
+
+
+par_est |> 
+  filter(item == "GROUP")
+
+par_est |> 
+  filter(item != "GROUP") |> 
+  arrange(item)
+
+-coef(fit1,simplify=TRUE)$reference$items
+-coef(fit1,simplify=TRUE)$reference$items[,2] |> scale() |> pnorm(lower.tail = TRUE) |> round(2)
